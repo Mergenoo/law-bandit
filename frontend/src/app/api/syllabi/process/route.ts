@@ -75,16 +75,21 @@ export async function POST(
 
     try {
       // Extract events using LLM
+      console.log("Starting LLM extraction for syllabus:", syllabusId);
       const extractedEvents = await extractEventsWithLLM(syllabus.content_text);
+      console.log("Extracted events count:", extractedEvents.length);
 
       // Validate and deduplicate events
       const validEvents = validateExtractedEvents(extractedEvents);
+      console.log("Valid events count:", validEvents.length);
       const uniqueEvents = deduplicateEvents(validEvents);
+      console.log("Unique events count:", uniqueEvents.length);
 
       // Convert to database format and insert
       const calendarEvents = uniqueEvents.map((event) =>
         convertToCalendarEvent(event, classId, user.id, syllabusId)
       );
+      console.log("Calendar events to insert:", calendarEvents.length);
 
       if (calendarEvents.length > 0) {
         const { error: insertError } = await supabase
@@ -92,8 +97,12 @@ export async function POST(
           .insert(calendarEvents);
 
         if (insertError) {
+          console.error("Failed to insert calendar events:", insertError);
           throw new Error(`Failed to insert events: ${insertError.message}`);
         }
+        console.log("Successfully inserted calendar events");
+      } else {
+        console.log("No calendar events to insert");
       }
 
       // Update syllabus status to completed
@@ -113,6 +122,7 @@ export async function POST(
         processingTime,
       });
     } catch (processingError) {
+      console.error("Processing error occurred:", processingError);
       // Update syllabus status to failed
       await supabase
         .from("syllabi")

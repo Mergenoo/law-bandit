@@ -1,6 +1,12 @@
 const express = require("express");
 const router = express.Router();
 
+// Import route modules
+const calendarRoutes = require("./calendar"); // Real version that saves to Supabase
+
+// Mount route modules
+router.use("/calendar", calendarRoutes);
+
 // Authentication routes
 router.post("/auth/login", (req, res) => {
   try {
@@ -303,6 +309,7 @@ router.get("/", (req, res) => {
       auth: "/auth",
       users: "/users",
       cases: "/cases",
+      calendar: "/calendar",
     },
   });
 });

@@ -219,6 +219,7 @@ export const EVENT_TYPES = {
   EXAM: "exam",
   QUIZ: "quiz",
   PROJECT: "project",
+  READING: "reading",
   DEADLINE: "deadline",
 } as const;
 

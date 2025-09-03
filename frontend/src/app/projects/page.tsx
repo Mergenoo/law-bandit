@@ -100,7 +100,7 @@ export default async function ProjectsPage() {
                         </div>
                         <div className="flex items-center space-x-3">
                           <ViewComponentsButtons id={classItem.id} />
-                          <UploadNewSyllabi />
+                          <UploadNewSyllabi classId={classItem.id} />
                         </div>
                       </div>
                     </div>

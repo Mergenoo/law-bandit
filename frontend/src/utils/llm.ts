@@ -1,17 +1,59 @@
 import { ExtractedEvent, EventType } from "@/types/database";
 
+// Gemini API configuration
+const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+
+export async function extractTextFromPDF(file: File): Promise<string> {
+  try {
+    const pdfjsLib = await import("pdfjs-dist");
+
+    // Use local worker file
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
+
+    // Read file as ArrayBuffer
+    const arrayBuffer = await file.arrayBuffer();
+
+    // Load PDF document
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let fullText = "";
+
+    // Extract text from each page
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+
+      // Combine text items
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pageText = textContent.items
+        .map((item) => (item as { str: string }).str || "")
+        .join(" ");
+
+      fullText += pageText + "\n";
+    }
+
+    console.log(`Extracted ${fullText.length} characters from PDF`);
+    return fullText.trim();
+  } catch (error) {
+    console.error("PDF text extraction failed:", error);
+    throw new Error("Failed to extract text from PDF");
+  }
+}
+
 /**
- * LLM prompt template for extracting calendar events from syllabus text
+ * Enhanced LLM prompt template for extracting calendar events from syllabus text
  */
 const EXTRACTION_PROMPT = `
-You are an AI assistant that extracts calendar events from academic syllabi. Your task is to identify assignments, exams, quizzes, projects, and deadlines with their due dates.
+You are an AI assistant that extracts calendar events from academic syllabi. Your task is to identify assignments, exams, quizzes, projects, readings, and deadlines with their due dates.
 
-Input text: {text}
+Please analyze the following syllabus text and extract all calendar events. Return ONLY a valid JSON array with no additional text.
 
-Please extract all calendar events and return them as a JSON array. Each event should have:
+Each event should have these exact fields:
 - title: A clear, concise title for the event
-- description: Additional details about the event (optional)
-- eventType: One of "assignment", "exam", "quiz", "project", or "deadline"
+- description: Additional details about the event (optional, can be null)
+- eventType: One of "assignment", "exam", "quiz", "project", "reading", or "deadline"
 - dueDate: Date in ISO format (YYYY-MM-DD)
 - dueTime: Time in 24-hour format (HH:MM) if specified, otherwise null
 - confidenceScore: Confidence level from 0.0 to 1.0
@@ -21,10 +63,113 @@ Rules:
 1. Only extract events with explicit dates (e.g., "Assignment due: September 15" not "second Tuesday")
 2. Be conservative with confidence scores - only high confidence for clear dates
 3. Include the original text snippet that was used to create each event
-4. If no clear events are found, return an empty array
+4. If no clear events are found, return an empty array []
+5. Handle various date formats: "Week 3", "March 15th", "Due: 3/15", "Dec 10", etc.
+6. Classify events appropriately:
+   - "assignment" for homework, papers, reports
+   - "exam" for tests, finals, midterms
+   - "quiz" for short assessments
+   - "project" for major assignments
+   - "reading" for required readings, chapters
+   - "deadline" for other time-sensitive items
 
-Return only valid JSON:
+Syllabus text to analyze:
 `;
+
+/**
+ * Call Gemini API to extract events
+ * @param text Syllabus text content
+ * @returns Array of extracted events
+ */
+async function callGeminiAPI(text: string): Promise<ExtractedEvent[]> {
+  if (!GEMINI_API_KEY) {
+    console.error(
+      "Gemini API key not configured. Please set NEXT_PUBLIC_GEMINI_API_KEY environment variable."
+    );
+    throw new Error("Gemini API key not configured");
+  }
+
+  const prompt = EXTRACTION_PROMPT + text;
+  console.log("Calling Gemini API with prompt length:", prompt.length);
+
+  try {
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1, // Low temperature for consistent, structured output
+          topK: 1,
+          topP: 0.8,
+          maxOutputTokens: 2048,
+        },
+      }),
+    });
+
+    console.log("Gemini API response status:", response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API error response:", errorText);
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log("Gemini API response data:", data);
+
+    if (
+      !data.candidates ||
+      !data.candidates[0] ||
+      !data.candidates[0].content
+    ) {
+      console.error("Invalid Gemini API response format:", data);
+      throw new Error("Invalid response format from Gemini API");
+    }
+
+    const responseText = data.candidates[0].content.parts[0].text;
+    console.log("Gemini raw response:", responseText);
+
+    // Try to extract JSON from the response
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.error("No JSON array found in Gemini response:", responseText);
+      throw new Error("No JSON array found in Gemini response");
+    }
+
+    const events = JSON.parse(jsonMatch[0]);
+    console.log("Parsed events:", events);
+
+    // Validate the structure
+    if (!Array.isArray(events)) {
+      console.error("Gemini response is not an array:", events);
+      throw new Error("Gemini response is not an array");
+    }
+
+    return events.map((event) => ({
+      title: event.title || "Unknown Event",
+      description: event.description || null,
+      eventType: event.eventType || "deadline",
+      dueDate: event.dueDate,
+      dueTime: event.dueTime || null,
+      confidenceScore: event.confidenceScore || 0.5,
+      sourceText: event.sourceText || "",
+    }));
+  } catch (error) {
+    console.error("Gemini API call failed:", error);
+    throw error;
+  }
+}
 
 /**
  * Fallback regex patterns for common date formats
@@ -70,7 +215,7 @@ const MONTH_MAP: Record<string, number> = {
 };
 
 /**
- * Extract events using LLM (placeholder for actual LLM integration)
+ * Extract events using Gemini LLM
  * @param text Syllabus text content
  * @returns Array of extracted events
  */
@@ -78,18 +223,20 @@ export async function extractEventsWithLLM(
   text: string
 ): Promise<ExtractedEvent[]> {
   try {
-    // This is a placeholder - replace with actual LLM API call
-    const prompt = EXTRACTION_PROMPT.replace("{text}", text);
+    console.log("Extracting events with Gemini LLM...");
+    console.log("Text length:", text.length);
+    console.log("Text preview:", text.substring(0, 200) + "...");
 
-    // Simulate LLM response for now
-    // In production, this would call OpenAI, Anthropic, or similar
-    const mockResponse = await simulateLLMResponse(prompt, text);
-
-    return mockResponse;
+    const events = await callGeminiAPI(text);
+    console.log("Extracted events from Gemini:", events);
+    return events;
   } catch (error) {
     console.error("LLM extraction failed:", error);
+    console.log("Falling back to regex patterns...");
     // Fallback to regex patterns
-    return extractEventsWithRegex(text);
+    const regexEvents = extractEventsWithRegex(text);
+    console.log("Extracted events from regex fallback:", regexEvents);
+    return regexEvents;
   }
 }
 
@@ -304,4 +451,25 @@ export function deduplicateEvents(events: ExtractedEvent[]): ExtractedEvent[] {
     seen.add(key);
     return true;
   });
+}
+
+// Test script to check Gemini API configuration
+export async function testGeminiConfiguration() {
+  const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  const GEMINI_API_URL =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+
+  console.log("=== Gemini API Configuration Test ===");
+  console.log("GEMINI_API_KEY configured:", !!GEMINI_API_KEY);
+  console.log("GEMINI_API_URL:", GEMINI_API_URL);
+
+  if (!GEMINI_API_KEY) {
+    console.error("❌ NEXT_PUBLIC_GEMINI_API_KEY is not set!");
+    console.log("Please set the environment variable in your .env.local file:");
+    console.log("NEXT_PUBLIC_GEMINI_API_KEY=your-gemini-api-key-here");
+    return false;
+  }
+
+  console.log("✅ Gemini API key is configured");
+  return true;
 }
