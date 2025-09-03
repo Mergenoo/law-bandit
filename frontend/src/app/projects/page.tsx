@@ -1,6 +1,8 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import CreateClassButton from "@/components/CreateClassButton";
+import ViewComponentsButtons from "@/components/ViewComponentsButtons";
+import UploadNewSyllabi from "@/components/UploadNewSyllabi";
 
 export default async function ProjectsPage() {
   const supabase = await createClient();
@@ -14,7 +16,6 @@ export default async function ProjectsPage() {
     redirect("/login");
   }
 
-  // Fetch classes for the current user
   const { data: classes, error } = await supabase
     .from("classes")
     .select("*")
@@ -24,19 +25,6 @@ export default async function ProjectsPage() {
   if (error) {
     console.error("Error fetching classes:", error);
   }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800";
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "completed":
-        return "bg-blue-100 text-blue-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -111,12 +99,8 @@ export default async function ProjectsPage() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-3">
-                          <button className="text-indigo-600 hover:text-indigo-900 text-sm font-medium transition-colors">
-                            View Details
-                          </button>
-                          <button className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-700 transition-colors">
-                            Upload Syllabus
-                          </button>
+                          <ViewComponentsButtons id={classItem.id} />
+                          <UploadNewSyllabi />
                         </div>
                       </div>
                     </div>
