@@ -72,6 +72,12 @@ export default function Navbar() {
                   My Classes
                 </Link>
                 <Link
+                  href="/calendar"
+                  className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  Calendar
+                </Link>
+                <Link
                   href="/google-calendar"
                   className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
                 >

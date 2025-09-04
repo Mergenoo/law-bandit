@@ -4,6 +4,7 @@ import CreateClassButton from "@/components/CreateClassButton";
 import ViewComponentsButtons from "@/components/ViewComponentsButtons";
 import UploadNewSyllabi from "@/components/UploadNewSyllabi";
 import GoogleCalendarOAuth from "@/components/GoogleCalendarOAuth";
+import CalendarView from "@/components/CalendarView";
 
 export default async function ProjectsPage() {
   const supabase = await createClient();
@@ -139,6 +140,11 @@ export default async function ProjectsPage() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Calendar Section */}
+        <div className="mt-8">
+          <CalendarView />
         </div>
       </div>
     </div>
