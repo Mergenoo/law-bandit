@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Navbar from "@/components/Navbar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,9 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Law Bandit",
-  description:
-    "Streamline your legal practice with our comprehensive case management platform",
+  title: "Law Bandit - Academic Calendar Management",
+  description: "Extract and manage calendar events from your course syllabi",
 };
 
 export default function RootLayout({
@@ -29,6 +29,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning={true}
       >
+        <Navbar />
         {children}
       </body>
     </html>

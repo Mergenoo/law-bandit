@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import CreateClassButton from "@/components/CreateClassButton";
 import ViewComponentsButtons from "@/components/ViewComponentsButtons";
 import UploadNewSyllabi from "@/components/UploadNewSyllabi";
+import GoogleCalendarOAuth from "@/components/GoogleCalendarOAuth";
 
 export default async function ProjectsPage() {
   const supabase = await createClient();
@@ -37,7 +38,10 @@ export default async function ProjectsPage() {
                 Manage your academic courses and syllabi
               </p>
             </div>
-            <CreateClassButton />
+            <div className="flex items-center space-x-3">
+              <GoogleCalendarOAuth classId="global" />
+              <CreateClassButton />
+            </div>
           </div>
 
           {classes && classes.length > 0 ? (

@@ -3,6 +3,10 @@
 import React, { useEffect, useState, use } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Syllabus, CalendarEvent } from "@/types/database";
+import {
+  addEventToGoogleCalendar,
+  getGoogleCalendars,
+} from "@/utils/googleCalendar";
 
 // Calendar component
 const CalendarView = ({ events }: { events: CalendarEvent[] }) => {
@@ -11,6 +15,18 @@ const CalendarView = ({ events }: { events: CalendarEvent[] }) => {
     null
   );
   const [showModal, setShowModal] = useState(false);
+  const [googleCalendars, setGoogleCalendars] = useState<
+    Array<{ id: string; summary: string; primary: boolean }>
+  >([]);
+  const [selectedCalendarId, setSelectedCalendarId] =
+    useState<string>("primary");
+  const [isAddingToGoogleCalendar, setIsAddingToGoogleCalendar] =
+    useState(false);
+  const [googleCalendarResult, setGoogleCalendarResult] = useState<{
+    success: boolean;
+    message: string;
+    eventUrl?: string;
+  } | null>(null);
 
   // Get current month's start and end dates
   const startOfMonth = new Date(
@@ -65,11 +81,66 @@ const CalendarView = ({ events }: { events: CalendarEvent[] }) => {
   const openEventModal = (event: CalendarEvent) => {
     setSelectedEvent(event);
     setShowModal(true);
+    loadGoogleCalendars(); // Load Google Calendars when modal opens
   };
 
   const closeModal = () => {
     setShowModal(false);
     setSelectedEvent(null);
+    setGoogleCalendarResult(null);
+  };
+
+  const loadGoogleCalendars = async () => {
+    try {
+      const result = await getGoogleCalendars();
+      setGoogleCalendars(result.calendars);
+      if (result.calendars.length > 0) {
+        const primaryCalendar = result.calendars.find((cal) => cal.primary);
+        setSelectedCalendarId(
+          primaryCalendar ? primaryCalendar.id : result.calendars[0].id
+        );
+      }
+    } catch (error) {
+      console.error("Error loading Google Calendars:", error);
+    }
+  };
+
+  const addToGoogleCalendar = async () => {
+    if (!selectedEvent) return;
+
+    try {
+      setIsAddingToGoogleCalendar(true);
+      setGoogleCalendarResult(null);
+
+      const eventData = {
+        title: selectedEvent.title,
+        description: selectedEvent.description || "",
+        due_date: selectedEvent.due_date,
+        due_time: selectedEvent.due_time || undefined,
+      };
+
+      const result = await addEventToGoogleCalendar(
+        eventData,
+        selectedCalendarId
+      );
+
+      setGoogleCalendarResult({
+        success: true,
+        message: "Event added to Google Calendar successfully!",
+        eventUrl: result.eventUrl,
+      });
+    } catch (error) {
+      console.error("Error adding to Google Calendar:", error);
+      setGoogleCalendarResult({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to add event to Google Calendar",
+      });
+    } finally {
+      setIsAddingToGoogleCalendar(false);
+    }
   };
 
   const monthNames = [
@@ -326,6 +397,141 @@ const CalendarView = ({ events }: { events: CalendarEvent[] }) => {
                     </div>
                   </div>
                 )}
+
+                {/* Google Calendar Integration */}
+                <div className="border-t pt-4">
+                  <h5 className="text-sm font-medium text-gray-700 mb-3">
+                    Add to Google Calendar
+                  </h5>
+
+                  {/* Calendar Selection */}
+                  {googleCalendars.length > 0 && (
+                    <div className="mb-3">
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Select Calendar:
+                      </label>
+                      <select
+                        value={selectedCalendarId}
+                        onChange={(e) => setSelectedCalendarId(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                      >
+                        {googleCalendars.map((calendar) => (
+                          <option key={calendar.id} value={calendar.id}>
+                            {calendar.summary}{" "}
+                            {calendar.primary ? "(Primary)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Add to Google Calendar Button */}
+                  <button
+                    onClick={addToGoogleCalendar}
+                    disabled={isAddingToGoogleCalendar}
+                    className={`w-full px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isAddingToGoogleCalendar
+                        ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {isAddingToGoogleCalendar ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg
+                          className="animate-spin h-4 w-4"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        Adding...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                          />
+                        </svg>
+                        Add to Google Calendar
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Result Message */}
+                  {googleCalendarResult && (
+                    <div
+                      className={`mt-3 p-3 rounded-md text-sm ${
+                        googleCalendarResult.success
+                          ? "bg-green-50 text-green-800 border border-green-200"
+                          : "bg-red-50 text-red-800 border border-red-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {googleCalendarResult.success ? (
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        )}
+                        <span>{googleCalendarResult.message}</span>
+                      </div>
+                      {googleCalendarResult.success &&
+                        googleCalendarResult.eventUrl && (
+                          <a
+                            href={googleCalendarResult.eventUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block mt-2 text-blue-600 hover:text-blue-800 underline"
+                          >
+                            View in Google Calendar →
+                          </a>
+                        )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
